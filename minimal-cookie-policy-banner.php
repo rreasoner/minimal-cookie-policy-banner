@@ -2,7 +2,7 @@
 /**
  * Plugin Name:       Minimal Cookie Policy Banner
  * Description:        A lightweight cookie policy banner with a dismiss button. Includes an admin page to enable/disable the banner and customize the message, button text, cookie policy link, dismissal duration, and all colors.
- * Version:           1.1.0
+ * Version:           1.1.3
  * Author:            Nehmedia
  * License:           GPL-2.0-or-later
  * Text Domain:       minimal-cookie-policy-banner
