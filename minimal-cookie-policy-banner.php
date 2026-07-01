@@ -15,6 +15,28 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+/* -------------------------------------------------------------------------
+ * Automatic updates from GitHub via Plugin Update Checker (Yahnis Elsts).
+ *
+ * Updates are driven by GitHub Releases. To ship a new version:
+ *   1. Bump the "Version:" header above.
+ *   2. Commit and push to the "main" branch.
+ *   3. Publish a GitHub Release whose tag matches the new version
+ *      (e.g. version 1.2.0 -> tag "v1.2.0" or "1.2.0").
+ * Sites running the plugin will then see the update in wp-admin.
+ * ---------------------------------------------------------------------- */
+
+require_once plugin_dir_path( __FILE__ ) . 'plugin-update-checker/plugin-update-checker.php';
+
+$mcpb_update_checker = \YahnisElsts\PluginUpdateChecker\v5\PucFactory::buildUpdateChecker(
+	'https://github.com/rreasoner/minimal-cookie-policy-banner/',
+	__FILE__,
+	'minimal-cookie-policy-banner'
+);
+
+// Look for the latest GitHub Release (falling back to the highest tag) on "main".
+$mcpb_update_checker->setBranch( 'main' );
+
 /**
  * Default settings.
  *
