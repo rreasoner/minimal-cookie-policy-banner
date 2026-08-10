@@ -1,11 +1,17 @@
 <?php
 /**
  * Plugin Name:       Minimal Cookie Policy Banner
- * Description:        A lightweight cookie policy banner with a dismiss button. Includes an admin page to enable/disable the banner and customize the message, button text, cookie policy link, dismissal duration, and all colors.
- * Version:           1.1.3
+ * Description:        A lightweight cookie policy banner with a dismiss button. Includes an admin page to enable/disable the banner and customize the message, button text, cookie policy link, dismissal duration, and all colors. Hardened against CSS/JS optimizers such as WP Rocket.
+ * Version:           1.2.0
  * Author:            Nehmedia
  * License:           GPL-2.0-or-later
  * Text Domain:       minimal-cookie-policy-banner
+ *
+ * Changelog:
+ * 1.2.0 - Critical styles moved to inline style attributes so the banner keeps
+ *         its fixed position and colors even when WP Rocket "Remove Unused CSS"
+ *         or "Optimize CSS Delivery" strips <style> blocks. Added WP Rocket
+ *         safelist + delay-JS exclusion filters. No settings changes required.
  *
  * @package MinimalCookiePolicyBanner
  */
@@ -82,6 +88,44 @@ function mcpb_allowed_message_html() {
 		'em'     => array(),
 		'br'     => array(),
 		'span'   => array(),
+	);
+}
+
+/* -------------------------------------------------------------------------
+ * Inline style builders.
+ *
+ * All layout- and color-critical CSS lives in element style attributes.
+ * Optimizers (WP Rocket Remove Unused CSS, Optimize CSS Delivery, Autoptimize,
+ * etc.) rewrite <style> tags and stylesheets but never touch inline style
+ * attributes, so the banner always renders fixed to the bottom with the
+ * configured colors regardless of those settings.
+ * ---------------------------------------------------------------------- */
+
+/**
+ * Inline style for the banner container.
+ *
+ * @param array $o Options.
+ * @return string
+ */
+function mcpb_banner_style( $o ) {
+	return sprintf(
+		'position:fixed;left:0;right:0;bottom:0;z-index:99999;display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap;box-sizing:border-box;padding:16px 20px;margin:0;font-size:14px;line-height:1.5;background:%1$s;color:%2$s;box-shadow:0 -2px 12px rgba(0,0,0,.18)',
+		$o['banner_bg'],
+		$o['banner_fg']
+	);
+}
+
+/**
+ * Inline style for the dismiss button.
+ *
+ * @param array $o Options.
+ * @return string
+ */
+function mcpb_button_style( $o ) {
+	return sprintf(
+		'flex:0 0 auto;border:0;cursor:pointer;border-radius:4px;padding:9px 22px;font-family:inherit;font-size:14px;font-weight:600;line-height:1;background:%1$s;color:%2$s',
+		$o['button_bg'],
+		$o['button_fg']
 	);
 }
 
@@ -248,12 +292,15 @@ function mcpb_render_settings_page() {
 }
 
 /* -------------------------------------------------------------------------
- * Front end: styles, banner markup, dismiss + 30-day cookie logic.
+ * Front end: enhancement styles, banner markup, dismiss + cookie logic.
  * ---------------------------------------------------------------------- */
 
 add_action( 'wp_head', 'mcpb_print_styles' );
 /**
- * Print the banner styles using the configured colors.
+ * Print non-critical enhancement styles only (hover feedback + mobile stacking).
+ *
+ * All critical styling is applied inline on the elements in mcpb_render_banner(),
+ * so the banner still renders correctly if an optimizer strips this <style> block.
  */
 function mcpb_print_styles() {
 	$o = mcpb_get_options();
@@ -262,13 +309,9 @@ function mcpb_print_styles() {
 	}
 	?>
 	<style id="mcpb-styles">
-		#mcpb-banner{position:fixed;left:0;right:0;bottom:0;z-index:99999;display:flex;align-items:center;justify-content:center;gap:16px;flex-wrap:wrap;box-sizing:border-box;padding:16px 20px;font-size:14px;line-height:1.5;background:<?php echo esc_html( $o['banner_bg'] ); ?>;color:<?php echo esc_html( $o['banner_fg'] ); ?>;box-shadow:0 -2px 12px rgba(0,0,0,.18)}
-		#mcpb-banner .mcpb-message{margin:0}
-		#mcpb-banner .mcpb-message a{color:inherit;text-decoration:underline}
-		#mcpb-banner .mcpb-dismiss{flex-shrink:0;border:0;cursor:pointer;border-radius:4px;padding:9px 22px;font-size:14px;font-weight:600;line-height:1;background:<?php echo esc_html( $o['button_bg'] ); ?>;color:<?php echo esc_html( $o['button_fg'] ); ?>}
-		#mcpb-banner .mcpb-dismiss:hover{opacity:.88}
-		@media (max-width:600px){#mcpb-banner{flex-direction:column;text-align:center}}
-	</style>
+			#mcpb-dismiss:hover{opacity:.88}
+			@media (max-width:600px){#mcpb-banner{flex-direction:column;text-align:center}}
+		</style>
 	<?php
 }
 
@@ -288,11 +331,16 @@ function mcpb_render_banner() {
 		$message .= ' <a href="' . esc_url( $o['policy_url'] ) . '">Cookie Policy</a>';
 	}
 
+	$message = wp_kses( $message, mcpb_allowed_message_html() );
+	// Force links in the message to match the banner color inline, so they look
+	// right even if the stylesheet is stripped by a CSS optimizer.
+	$message = preg_replace( '/<a\s/i', '<a style="color:inherit;text-decoration:underline" ', $message );
+
 	$expiry_days = max( 1, (int) $o['expiry_days'] );
 	?>
-	<div id="mcpb-banner" role="region" aria-label="Cookie notice">
-		<p class="mcpb-message"><?php echo wp_kses( $message, mcpb_allowed_message_html() ); ?></p>
-		<button type="button" id="mcpb-dismiss" class="mcpb-dismiss"><?php echo esc_html( $o['button'] ); ?></button>
+	<div id="mcpb-banner" role="region" aria-label="Cookie notice" style="<?php echo esc_attr( mcpb_banner_style( $o ) ); ?>">
+		<p class="mcpb-message" style="margin:0"><?php echo $message; // phpcs:ignore WordPress.Security.EscapeOutput -- Sanitized above with wp_kses. ?></p>
+		<button type="button" id="mcpb-dismiss" class="mcpb-dismiss" style="<?php echo esc_attr( mcpb_button_style( $o ) ); ?>"><?php echo esc_html( $o['button'] ); ?></button>
 	</div>
 	<script>
 	(function () {
@@ -326,6 +374,43 @@ function mcpb_render_banner() {
 	</script>
 	<?php
 }
+
+/* -------------------------------------------------------------------------
+ * WP Rocket compatibility.
+ *
+ * These filters run only if WP Rocket is present; otherwise nothing listens to
+ * them and they are harmless. They keep the banner's selectors in the generated
+ * "used CSS" and keep the inline dismiss script out of "Delay JavaScript
+ * Execution" so the button always responds on the first click.
+ * ---------------------------------------------------------------------- */
+
+add_filter( 'rocket_rucss_safelist', 'mcpb_rocket_rucss_safelist' );
+/**
+ * Keep the banner's CSS when WP Rocket "Remove Unused CSS" is enabled.
+ *
+ * @param array $safelist Existing safelist entries.
+ * @return array
+ */
+function mcpb_rocket_rucss_safelist( $safelist ) {
+	$safelist[] = '#mcpb-banner';
+	$safelist[] = '.mcpb-message';
+	$safelist[] = '#mcpb-dismiss';
+	return $safelist;
+}
+
+add_filter( 'rocket_delay_js_exclusions', 'mcpb_rocket_delay_js_exclusions' );
+/**
+ * Exclude the dismiss script from WP Rocket "Delay JavaScript Execution".
+ *
+ * @param array $exclusions Existing exclusion patterns.
+ * @return array
+ */
+function mcpb_rocket_delay_js_exclusions( $exclusions ) {
+	$exclusions[] = 'mcpb_dismissed';
+	$exclusions[] = 'mcpb-banner';
+	return $exclusions;
+}
+
 
 /* -------------------------------------------------------------------------
  * Remove stored option on uninstall.
